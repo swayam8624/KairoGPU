@@ -5,6 +5,7 @@ module;
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 export module Kairo.GPU;
 
@@ -42,6 +43,15 @@ export namespace kairo::gpu
         bool enableValidation = true;
     };
 
+    struct DeviceCapabilities final
+    {
+        std::uint64_t maxBufferBytes = 0;
+        std::uint32_t maxThreadsPerGroup = 0;
+        bool supportsFloat16 = false;
+        bool supportsInt8Dot = false;
+        bool supportsUnifiedMemory = false;
+    };
+
     struct BufferDesc final
     {
         std::size_t byteSize = 0;
@@ -60,6 +70,90 @@ export namespace kairo::gpu
     {
         std::string name;
         DispatchSize threadsPerGroup{};
+    };
+
+    struct BufferHandle final
+    {
+        std::uint64_t id = 0;
+        BufferDesc desc{};
+
+        [[nodiscard]]
+        bool Valid() const noexcept
+        {
+            return id != 0;
+        }
+    };
+
+    struct KernelHandle final
+    {
+        std::uint64_t id = 0;
+        KernelDesc desc{};
+
+        [[nodiscard]]
+        bool Valid() const noexcept
+        {
+            return id != 0;
+        }
+    };
+
+    enum class CommandKind
+    {
+        Upload,
+        Download,
+        Dispatch,
+        Barrier
+    };
+
+    struct Command final
+    {
+        CommandKind kind = CommandKind::Barrier;
+        BufferHandle buffer{};
+        KernelHandle kernel{};
+        DispatchSize groups{};
+    };
+
+    class CommandList final
+    {
+    public:
+        void Upload(BufferHandle buffer)
+        {
+            m_commands.push_back({ .kind = CommandKind::Upload, .buffer = buffer });
+        }
+
+        void Download(BufferHandle buffer)
+        {
+            m_commands.push_back({ .kind = CommandKind::Download, .buffer = buffer });
+        }
+
+        void Dispatch(KernelHandle kernel, DispatchSize groups)
+        {
+            m_commands.push_back({ .kind = CommandKind::Dispatch, .kernel = kernel, .groups = groups });
+        }
+
+        void Barrier()
+        {
+            m_commands.push_back({ .kind = CommandKind::Barrier });
+        }
+
+        [[nodiscard]]
+        const std::vector<Command>& Commands() const noexcept
+        {
+            return m_commands;
+        }
+
+        [[nodiscard]]
+        bool Empty() const noexcept
+        {
+            return m_commands.empty();
+        }
+
+        void Clear()
+        {
+            m_commands.clear();
+        }
+
+    private:
+        std::vector<Command> m_commands;
     };
 
     class UnsupportedBackend final : public std::runtime_error
@@ -95,8 +189,35 @@ export namespace kairo::gpu
             return m_desc.backend != Backend::None;
         }
 
+        [[nodiscard]]
+        DeviceCapabilities Capabilities() const noexcept
+        {
+            return {};
+        }
+
+        [[nodiscard]]
+        BufferHandle CreateBuffer(const BufferDesc& desc)
+        {
+            if (!IsAvailable())
+            {
+                throw UnsupportedBackend("Cannot create GPU buffer without a compiled backend.");
+            }
+            return { .id = ++m_nextResourceId, .desc = desc };
+        }
+
+        [[nodiscard]]
+        KernelHandle CreateKernel(const KernelDesc& desc)
+        {
+            if (!IsAvailable())
+            {
+                throw UnsupportedBackend("Cannot create GPU kernel without a compiled backend.");
+            }
+            return { .id = ++m_nextResourceId, .desc = desc };
+        }
+
     private:
         DeviceDesc m_desc;
+        std::uint64_t m_nextResourceId = 0;
     };
 
     [[nodiscard]]
