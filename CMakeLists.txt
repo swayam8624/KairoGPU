@@ -15,3 +15,6 @@ target_sources(KairoGPU
 
 add_executable(KairoGPUSmoke tests/smoke.cpp)
 target_link_libraries(KairoGPUSmoke PRIVATE KairoGPU)
+
+enable_testing()
+add_test(NAME KairoGPUSmoke COMMAND KairoGPUSmoke)
