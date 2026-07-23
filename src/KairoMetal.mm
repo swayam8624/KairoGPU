@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
+#import <dispatch/dispatch.h>
 
 #include <cstring>
 
@@ -75,14 +76,18 @@ int kairo_metal_vector_add(void* deviceHandle, void* lhsHandle, void* rhsHandle,
     id<MTLBuffer> rhs = (__bridge id<MTLBuffer>)rhsHandle;
     id<MTLBuffer> output = (__bridge id<MTLBuffer>)outputHandle;
     if (!device || !lhs || !rhs || !output || count == 0) return 0;
-    static NSString* source = @"#include <metal_stdlib>\nusing namespace metal;\nkernel void kairo_vector_add(device const float* lhs [[buffer(0)]], device const float* rhs [[buffer(1)]], device float* output [[buffer(2)]], constant uint& count [[buffer(3)]], uint index [[thread_position_in_grid]]) { if (index < count) output[index] = lhs[index] + rhs[index]; }";
-    NSError* error = nil;
-    id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
-    if (!library || error) return 0;
-    id<MTLFunction> function = [library newFunctionWithName:@"kairo_vector_add"];
-    id<MTLComputePipelineState> pipeline = function ? [device newComputePipelineStateWithFunction:function error:&error] : nil;
-    if (!pipeline || error) return 0;
-    id<MTLCommandQueue> queue = [device newCommandQueue];
+    static dispatch_once_t initialization;
+    static id<MTLComputePipelineState> pipeline = nil;
+    static id<MTLCommandQueue> queue = nil;
+    dispatch_once(&initialization, ^{
+        static NSString* source = @"#include <metal_stdlib>\nusing namespace metal;\nkernel void kairo_vector_add(device const float* lhs [[buffer(0)]], device const float* rhs [[buffer(1)]], device float* output [[buffer(2)]], constant uint& count [[buffer(3)]], uint index [[thread_position_in_grid]]) { if (index < count) output[index] = lhs[index] + rhs[index]; }";
+        NSError* error = nil;
+        id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
+        id<MTLFunction> function = library && !error ? [library newFunctionWithName:@"kairo_vector_add"] : nil;
+        pipeline = function ? [device newComputePipelineStateWithFunction:function error:&error] : nil;
+        queue = pipeline && !error ? [device newCommandQueue] : nil;
+    });
+    if (!pipeline || !queue) return 0;
     id<MTLCommandBuffer> command = [queue commandBuffer];
     id<MTLComputeCommandEncoder> encoder = [command computeCommandEncoder];
     const uint32_t elementCount = static_cast<uint32_t>(count);

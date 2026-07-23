@@ -44,6 +44,9 @@ int main()
     metal.VectorAddFloat(lhsBuffer, rhsBuffer, sumBuffer, sum.size());
     metal.Download(sumBuffer, std::as_writable_bytes(std::span(sum)));
     assert(sum[0] == 11.0f && sum[3] == 44.0f);
+    metal.VectorAddFloat(sumBuffer, lhsBuffer, rhsBuffer, sum.size());
+    metal.Download(rhsBuffer, std::as_writable_bytes(std::span(sum)));
+    assert(sum[0] == 12.0f && sum[3] == 48.0f);
 #endif
     return 0;
 }

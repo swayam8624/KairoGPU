@@ -39,9 +39,10 @@ devices and buffers are real Metal objects and are released with `Device`.
 Bounded shared-storage `Upload` and `Download` operations are implemented and
 tested with a real buffer round trip. `Device::VectorAddFloat` compiles and
 submits one fixed Metal compute kernel, waits for its completion, and is tested
-through GPU buffer readback. This is a deliberate vertical slice, not a general
-shader system: it recompiles the fixed source for each call and has no pipeline
-cache, resource-binding API, asynchronous queue, matmul, autograd, or profiler.
+through GPU buffer readback. Its compiled pipeline and command queue are cached
+and reused across dispatches. This is a deliberate vertical slice, not a
+general shader system: it has no generic resource-binding API, asynchronous
+queue, matmul, autograd, or profiler.
 
 ## Where It Connects
 
@@ -62,7 +63,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Reusable pipeline cache, resource binding, and elementwise kernel library.
-2. Tiled matmul, reductions, and explicit command submission/synchronization.
+1. Resource binding and a broader elementwise kernel library.
+2. Tiled matmul, reductions, and explicit asynchronous submission/synchronization.
 3. GPU profiling and tensor-runtime backend dispatch.
 4. Vulkan/CUDA/WebGPU backends after the first backend is correct.
