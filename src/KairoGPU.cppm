@@ -22,6 +22,7 @@ void kairo_metal_destroy_buffer(void*);
 int kairo_metal_write_buffer(void*, const void*, unsigned long long);
 int kairo_metal_read_buffer(void*, void*, unsigned long long);
 int kairo_metal_vector_add(void*, void*, void*, void*, unsigned long long);
+int kairo_metal_matmul(void*, void*, void*, void*, unsigned int, unsigned int, unsigned int);
 }
 #endif
 
@@ -300,6 +301,51 @@ export namespace kairo::gpu
                 && kairo_metal_vector_add(m_nativeDevice, nativeLhs, nativeRhs, nativeOutput, static_cast<unsigned long long>(count)) != 0) return;
 #endif
             throw UnsupportedBackend("GPU vector add is unavailable for this backend.");
+        }
+
+        /// Multiplies row-major Float32 matrices [rows, inner] and
+        /// [inner, columns] into [rows, columns] on the Metal compute device.
+        void MatMulFloat(
+            BufferHandle lhs,
+            BufferHandle rhs,
+            BufferHandle output,
+            std::size_t rows,
+            std::size_t inner,
+            std::size_t columns)
+        {
+            constexpr auto kMaxDimension = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
+            const auto requiredBytes = [](std::size_t first, std::size_t second)
+            {
+                if (first == 0 || second == 0
+                    || first > std::numeric_limits<std::size_t>::max() / second
+                    || first * second > std::numeric_limits<std::size_t>::max() / sizeof(float))
+                {
+                    throw std::invalid_argument("Matrix dimensions overflow the addressable buffer size.");
+                }
+                return first * second * sizeof(float);
+            };
+            if (rows > kMaxDimension || inner > kMaxDimension || columns > kMaxDimension
+                || lhs.desc.byteSize < requiredBytes(rows, inner)
+                || rhs.desc.byteSize < requiredBytes(inner, columns)
+                || output.desc.byteSize < requiredBytes(rows, columns))
+            {
+                throw std::invalid_argument("MatMulFloat buffers are invalid for the requested matrix dimensions.");
+            }
+            void* nativeLhs = NativeBuffer(lhs);
+            void* nativeRhs = NativeBuffer(rhs);
+            void* nativeOutput = NativeBuffer(output);
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal
+                && kairo_metal_matmul(
+                    m_nativeDevice,
+                    nativeLhs,
+                    nativeRhs,
+                    nativeOutput,
+                    static_cast<unsigned int>(rows),
+                    static_cast<unsigned int>(inner),
+                    static_cast<unsigned int>(columns)) != 0) return;
+#endif
+            throw UnsupportedBackend("GPU matrix multiplication is unavailable for this backend.");
         }
 
         [[nodiscard]]
