@@ -2,6 +2,7 @@ module;
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -20,6 +21,7 @@ void* kairo_metal_create_buffer(void*, unsigned long long);
 void kairo_metal_destroy_buffer(void*);
 int kairo_metal_write_buffer(void*, const void*, unsigned long long);
 int kairo_metal_read_buffer(void*, void*, unsigned long long);
+int kairo_metal_vector_add(void*, void*, void*, void*, unsigned long long);
 }
 #endif
 
@@ -278,6 +280,26 @@ export namespace kairo::gpu
             if (m_desc.backend == Backend::Metal && kairo_metal_read_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0) return;
 #endif
             throw UnsupportedBackend("GPU download is unavailable for this backend.");
+        }
+
+        /// Runs a bounded Float32 vector addition on the Metal compute device.
+        /// All buffers must be owned by this device and contain `count` floats.
+        void VectorAddFloat(BufferHandle lhs, BufferHandle rhs, BufferHandle output, std::size_t count)
+        {
+            if (count == 0 || count > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())
+                || lhs.desc.byteSize < count * sizeof(float) || rhs.desc.byteSize < count * sizeof(float)
+                || output.desc.byteSize < count * sizeof(float))
+            {
+                throw std::invalid_argument("VectorAddFloat buffers are invalid for the requested count.");
+            }
+            void* nativeLhs = NativeBuffer(lhs);
+            void* nativeRhs = NativeBuffer(rhs);
+            void* nativeOutput = NativeBuffer(output);
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal
+                && kairo_metal_vector_add(m_nativeDevice, nativeLhs, nativeRhs, nativeOutput, static_cast<unsigned long long>(count)) != 0) return;
+#endif
+            throw UnsupportedBackend("GPU vector add is unavailable for this backend.");
         }
 
         [[nodiscard]]

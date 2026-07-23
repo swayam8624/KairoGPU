@@ -68,4 +68,35 @@ int kairo_metal_read_buffer(void* handle, void* destination, unsigned long long 
     return 1;
 }
 
+int kairo_metal_vector_add(void* deviceHandle, void* lhsHandle, void* rhsHandle, void* outputHandle, unsigned long long count)
+{
+    id<MTLDevice> device = (__bridge id<MTLDevice>)deviceHandle;
+    id<MTLBuffer> lhs = (__bridge id<MTLBuffer>)lhsHandle;
+    id<MTLBuffer> rhs = (__bridge id<MTLBuffer>)rhsHandle;
+    id<MTLBuffer> output = (__bridge id<MTLBuffer>)outputHandle;
+    if (!device || !lhs || !rhs || !output || count == 0) return 0;
+    static NSString* source = @"#include <metal_stdlib>\nusing namespace metal;\nkernel void kairo_vector_add(device const float* lhs [[buffer(0)]], device const float* rhs [[buffer(1)]], device float* output [[buffer(2)]], constant uint& count [[buffer(3)]], uint index [[thread_position_in_grid]]) { if (index < count) output[index] = lhs[index] + rhs[index]; }";
+    NSError* error = nil;
+    id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
+    if (!library || error) return 0;
+    id<MTLFunction> function = [library newFunctionWithName:@"kairo_vector_add"];
+    id<MTLComputePipelineState> pipeline = function ? [device newComputePipelineStateWithFunction:function error:&error] : nil;
+    if (!pipeline || error) return 0;
+    id<MTLCommandQueue> queue = [device newCommandQueue];
+    id<MTLCommandBuffer> command = [queue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [command computeCommandEncoder];
+    const uint32_t elementCount = static_cast<uint32_t>(count);
+    [encoder setComputePipelineState:pipeline];
+    [encoder setBuffer:lhs offset:0 atIndex:0];
+    [encoder setBuffer:rhs offset:0 atIndex:1];
+    [encoder setBuffer:output offset:0 atIndex:2];
+    [encoder setBytes:&elementCount length:sizeof(elementCount) atIndex:3];
+    const NSUInteger width = MIN(pipeline.maxTotalThreadsPerThreadgroup, 256);
+    [encoder dispatchThreads:MTLSizeMake(count, 1, 1) threadsPerThreadgroup:MTLSizeMake(width, 1, 1)];
+    [encoder endEncoding];
+    [command commit];
+    [command waitUntilCompleted];
+    return command.status == MTLCommandBufferStatusCompleted && !command.error;
+}
+
 }

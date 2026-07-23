@@ -30,15 +30,18 @@ KairoGPU starts with a backend-neutral contract:
 - `CommandList` with upload, download, dispatch, and barrier commands.
 - an Apple-platform Metal bridge for real device discovery, capabilities, and
   shared-storage buffer allocation.
+- a validated Metal Float32 vector-add compute dispatch.
 - explicit `UnsupportedBackend` failure for unlinked backends and for kernels
   that do not yet have a validated command implementation.
 
 The current implementation has a bounded Metal resource lifecycle on Apple:
 devices and buffers are real Metal objects and are released with `Device`.
 Bounded shared-storage `Upload` and `Download` operations are implemented and
-tested with a real buffer round trip. Kernel compilation, command submission,
-synchronization, and profiling remain unimplemented, so it does not claim GPU
-tensor execution yet.
+tested with a real buffer round trip. `Device::VectorAddFloat` compiles and
+submits one fixed Metal compute kernel, waits for its completion, and is tested
+through GPU buffer readback. This is a deliberate vertical slice, not a general
+shader system: it recompiles the fixed source for each call and has no pipeline
+cache, resource-binding API, asynchronous queue, matmul, autograd, or profiler.
 
 ## Where It Connects
 
@@ -59,7 +62,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Resource binding and shader/kernel library for tensor elementwise ops and matmul.
-2. Command submission and synchronization.
-3. GPU profiling.
+1. Reusable pipeline cache, resource binding, and elementwise kernel library.
+2. Tiled matmul, reductions, and explicit command submission/synchronization.
+3. GPU profiling and tensor-runtime backend dispatch.
 4. Vulkan/CUDA/WebGPU backends after the first backend is correct.

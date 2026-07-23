@@ -1,7 +1,9 @@
-import Kairo.GPU;
-
-#include <cassert>
 #include <array>
+#include <bit>
+#include <cassert>
+#include <span>
+
+import Kairo.GPU;
 
 int main()
 {
@@ -30,6 +32,18 @@ int main()
     metal.Upload(buffer, upload);
     metal.Download(buffer, download);
     assert(upload == download);
+
+    const std::array<float, 4> lhs{ 1.0f, 2.0f, 3.0f, 4.0f };
+    const std::array<float, 4> rhs{ 10.0f, 20.0f, 30.0f, 40.0f };
+    std::array<float, 4> sum{};
+    const auto lhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(lhs), .usage = kairo::gpu::BufferUsage::Storage });
+    const auto rhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(rhs), .usage = kairo::gpu::BufferUsage::Storage });
+    const auto sumBuffer = metal.CreateBuffer({ .byteSize = sizeof(sum), .usage = kairo::gpu::BufferUsage::Storage });
+    metal.Upload(lhsBuffer, std::as_bytes(std::span(lhs)));
+    metal.Upload(rhsBuffer, std::as_bytes(std::span(rhs)));
+    metal.VectorAddFloat(lhsBuffer, rhsBuffer, sumBuffer, sum.size());
+    metal.Download(sumBuffer, std::as_writable_bytes(std::span(sum)));
+    assert(sum[0] == 11.0f && sum[3] == 44.0f);
 #endif
     return 0;
 }
