@@ -28,10 +28,15 @@ KairoGPU starts with a backend-neutral contract:
 - `BufferDesc`, `BufferHandle`.
 - `KernelDesc`, `KernelHandle`.
 - `CommandList` with upload, download, dispatch, and barrier commands.
-- explicit `UnsupportedBackend` failure when a real backend is not linked.
+- an Apple-platform Metal bridge for real device discovery, capabilities, and
+  shared-storage buffer allocation.
+- explicit `UnsupportedBackend` failure for unlinked backends and for kernels
+  that do not yet have a validated command implementation.
 
-The current implementation is intentionally honest: it exposes the contract and
-compiled-backend query surface, but does not pretend to run GPU kernels yet.
+The current implementation has a bounded Metal resource lifecycle on Apple:
+devices and buffers are real Metal objects and are released with `Device`.
+Kernel compilation, command submission, synchronization, and profiling remain
+unimplemented, so it does not claim GPU tensor execution yet.
 
 ## Where It Connects
 
@@ -52,9 +57,8 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Metal backend for Apple Silicon.
-2. GPU buffer allocator and staging buffers.
-3. Shader/kernel library for tensor elementwise ops and matmul.
-4. Command submission and synchronization.
-5. GPU profiling.
-6. Vulkan/CUDA/WebGPU backends after the first backend is correct.
+1. Upload/readback staging and resource binding.
+2. Shader/kernel library for tensor elementwise ops and matmul.
+3. Command submission and synchronization.
+4. GPU profiling.
+5. Vulkan/CUDA/WebGPU backends after the first backend is correct.

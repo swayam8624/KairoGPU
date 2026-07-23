@@ -7,6 +7,19 @@ module;
 #include <utility>
 #include <vector>
 
+#if defined(KAIRO_GPU_METAL)
+extern "C" {
+void* kairo_metal_create_device();
+void kairo_metal_destroy_device(void*);
+unsigned long long kairo_metal_max_buffer_bytes(void*);
+unsigned int kairo_metal_max_threads_per_group(void*);
+int kairo_metal_supports_float16(void*);
+int kairo_metal_supports_unified_memory(void*);
+void* kairo_metal_create_buffer(void*, unsigned long long);
+void kairo_metal_destroy_buffer(void*);
+}
+#endif
+
 export module Kairo.GPU;
 
 export namespace kairo::gpu
@@ -171,10 +184,30 @@ export namespace kairo::gpu
         explicit Device(DeviceDesc desc = {})
             : m_desc(std::move(desc))
         {
-            if (m_desc.backend != Backend::None)
+            if (m_desc.backend == Backend::None)
             {
-                throw UnsupportedBackend("KairoGPU backend implementation is not linked yet.");
+                return;
             }
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal)
+            {
+                m_nativeDevice = kairo_metal_create_device();
+                if (!m_nativeDevice) throw UnsupportedBackend("Metal is not available on this host.");
+                return;
+            }
+#endif
+            throw UnsupportedBackend("Requested KairoGPU backend implementation is not linked.");
+        }
+
+        Device(const Device&) = delete;
+        Device& operator=(const Device&) = delete;
+
+        ~Device()
+        {
+#if defined(KAIRO_GPU_METAL)
+            for (void* buffer : m_nativeBuffers) kairo_metal_destroy_buffer(buffer);
+            kairo_metal_destroy_device(m_nativeDevice);
+#endif
         }
 
         [[nodiscard]]
@@ -186,23 +219,42 @@ export namespace kairo::gpu
         [[nodiscard]]
         bool IsAvailable() const noexcept
         {
-            return m_desc.backend != Backend::None;
+            return m_nativeDevice != nullptr;
         }
 
         [[nodiscard]]
         DeviceCapabilities Capabilities() const noexcept
         {
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal && m_nativeDevice)
+            {
+                return { .maxBufferBytes = kairo_metal_max_buffer_bytes(m_nativeDevice),
+                    .maxThreadsPerGroup = kairo_metal_max_threads_per_group(m_nativeDevice),
+                    .supportsFloat16 = kairo_metal_supports_float16(m_nativeDevice) != 0,
+                    .supportsInt8Dot = false,
+                    .supportsUnifiedMemory = kairo_metal_supports_unified_memory(m_nativeDevice) != 0 };
+            }
+#endif
             return {};
         }
 
         [[nodiscard]]
         BufferHandle CreateBuffer(const BufferDesc& desc)
         {
-            if (!IsAvailable())
+            if (!IsAvailable() || desc.byteSize == 0)
             {
-                throw UnsupportedBackend("Cannot create GPU buffer without a compiled backend.");
+                throw UnsupportedBackend("Cannot create a GPU buffer without an available backend and non-zero size.");
             }
-            return { .id = ++m_nextResourceId, .desc = desc };
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal)
+            {
+                void* buffer = kairo_metal_create_buffer(m_nativeDevice, static_cast<unsigned long long>(desc.byteSize));
+                if (!buffer) throw std::runtime_error("Metal buffer allocation failed.");
+                m_nativeBuffers.push_back(buffer);
+                return { .id = ++m_nextResourceId, .desc = desc };
+            }
+#endif
+            throw UnsupportedBackend("GPU buffer allocation is unavailable for this backend.");
         }
 
         [[nodiscard]]
@@ -218,17 +270,27 @@ export namespace kairo::gpu
     private:
         DeviceDesc m_desc;
         std::uint64_t m_nextResourceId = 0;
+        void* m_nativeDevice = nullptr;
+        std::vector<void*> m_nativeBuffers;
     };
 
     [[nodiscard]]
     inline std::size_t CompiledBackendCount() noexcept
     {
-        return 1;
+        return 1
+#if defined(KAIRO_GPU_METAL)
+            + 1
+#endif
+            ;
     }
 
     [[nodiscard]]
     inline bool IsBackendCompiled(Backend backend) noexcept
     {
-        return backend == Backend::None;
+        if (backend == Backend::None) return true;
+#if defined(KAIRO_GPU_METAL)
+        if (backend == Backend::Metal) return true;
+#endif
+        return false;
     }
 }
