@@ -25,7 +25,7 @@ int main()
     kairo::gpu::Device metal({ .backend = kairo::gpu::Backend::Metal, .debugName = "smoke" });
     assert(metal.IsAvailable());
     assert(metal.Capabilities().maxBufferBytes > 0);
-    const auto buffer = metal.CreateBuffer({ .byteSize = 4096, .usage = kairo::gpu::BufferUsage::Storage });
+    const auto buffer = metal.CreateBuffer({ .byteSize = 4096, .usage = kairo::gpu::BufferUsage::Storage, .debugName = "round-trip" });
     assert(buffer.Valid());
     const std::array<std::byte, 4> upload{ std::byte{0x10}, std::byte{0x20}, std::byte{0x30}, std::byte{0x40} };
     std::array<std::byte, 4> download{};
@@ -36,9 +36,9 @@ int main()
     const std::array<float, 4> lhs{ 1.0f, 2.0f, 3.0f, 4.0f };
     const std::array<float, 4> rhs{ 10.0f, 20.0f, 30.0f, 40.0f };
     std::array<float, 4> sum{};
-    const auto lhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(lhs), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto rhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(rhs), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto sumBuffer = metal.CreateBuffer({ .byteSize = sizeof(sum), .usage = kairo::gpu::BufferUsage::Storage });
+    const auto lhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(lhs), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "vector-lhs" });
+    const auto rhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(rhs), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "vector-rhs" });
+    const auto sumBuffer = metal.CreateBuffer({ .byteSize = sizeof(sum), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "vector-output" });
     metal.Upload(lhsBuffer, std::as_bytes(std::span(lhs)));
     metal.Upload(rhsBuffer, std::as_bytes(std::span(rhs)));
     metal.VectorAddFloat(lhsBuffer, rhsBuffer, sumBuffer, sum.size());
@@ -51,9 +51,9 @@ int main()
     const std::array<float, 6> matrixLhs{ 1, 2, 3, 4, 5, 6 };
     const std::array<float, 6> matrixRhs{ 7, 8, 9, 10, 11, 12 };
     std::array<float, 4> matrixOutput{};
-    const auto matrixLhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixLhs), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto matrixRhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixRhs), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto matrixOutputBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixOutput), .usage = kairo::gpu::BufferUsage::Storage });
+    const auto matrixLhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixLhs), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "matmul-lhs" });
+    const auto matrixRhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixRhs), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "matmul-rhs" });
+    const auto matrixOutputBuffer = metal.CreateBuffer({ .byteSize = sizeof(matrixOutput), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "matmul-output" });
     metal.Upload(matrixLhsBuffer, std::as_bytes(std::span(matrixLhs)));
     metal.Upload(matrixRhsBuffer, std::as_bytes(std::span(matrixRhs)));
     metal.MatMulFloat(matrixLhsBuffer, matrixRhsBuffer, matrixOutputBuffer, 2, 3, 2);
@@ -72,9 +72,9 @@ int main()
             boundaryIdentity[row * 17 + column] = row == column ? 1.0f : 0.0f;
         }
     }
-    const auto boundaryLhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryLhs), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto boundaryIdentityBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryIdentity), .usage = kairo::gpu::BufferUsage::Storage });
-    const auto boundaryOutputBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryOutput), .usage = kairo::gpu::BufferUsage::Storage });
+    const auto boundaryLhsBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryLhs), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "boundary-lhs" });
+    const auto boundaryIdentityBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryIdentity), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "boundary-identity" });
+    const auto boundaryOutputBuffer = metal.CreateBuffer({ .byteSize = sizeof(boundaryOutput), .usage = kairo::gpu::BufferUsage::Storage, .debugName = "boundary-output" });
     metal.Upload(boundaryLhsBuffer, std::as_bytes(std::span(boundaryLhs)));
     metal.Upload(boundaryIdentityBuffer, std::as_bytes(std::span(boundaryIdentity)));
     metal.MatMulFloat(boundaryLhsBuffer, boundaryIdentityBuffer, boundaryOutputBuffer, 17, 17, 17);
