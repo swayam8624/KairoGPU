@@ -2,6 +2,7 @@ module;
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -17,6 +18,8 @@ int kairo_metal_supports_float16(void*);
 int kairo_metal_supports_unified_memory(void*);
 void* kairo_metal_create_buffer(void*, unsigned long long);
 void kairo_metal_destroy_buffer(void*);
+int kairo_metal_write_buffer(void*, const void*, unsigned long long);
+int kairo_metal_read_buffer(void*, void*, unsigned long long);
 }
 #endif
 
@@ -257,6 +260,26 @@ export namespace kairo::gpu
             throw UnsupportedBackend("GPU buffer allocation is unavailable for this backend.");
         }
 
+        void Upload(BufferHandle buffer, std::span<const std::byte> bytes)
+        {
+            void* native = NativeBuffer(buffer);
+            if (bytes.size() > buffer.desc.byteSize) throw std::invalid_argument("GPU upload exceeds buffer size.");
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal && kairo_metal_write_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0) return;
+#endif
+            throw UnsupportedBackend("GPU upload is unavailable for this backend.");
+        }
+
+        void Download(BufferHandle buffer, std::span<std::byte> bytes) const
+        {
+            void* native = NativeBuffer(buffer);
+            if (bytes.size() > buffer.desc.byteSize) throw std::invalid_argument("GPU download exceeds buffer size.");
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal && kairo_metal_read_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0) return;
+#endif
+            throw UnsupportedBackend("GPU download is unavailable for this backend.");
+        }
+
         [[nodiscard]]
         KernelHandle CreateKernel(const KernelDesc& desc)
         {
@@ -272,6 +295,13 @@ export namespace kairo::gpu
         std::uint64_t m_nextResourceId = 0;
         void* m_nativeDevice = nullptr;
         std::vector<void*> m_nativeBuffers;
+
+        [[nodiscard]]
+        void* NativeBuffer(BufferHandle buffer) const
+        {
+            if (!buffer.Valid() || buffer.id > m_nativeBuffers.size()) throw std::invalid_argument("GPU buffer handle is not owned by this device.");
+            return m_nativeBuffers[static_cast<std::size_t>(buffer.id - 1)];
+        }
     };
 
     [[nodiscard]]

@@ -1,6 +1,8 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 
+#include <cstring>
+
 extern "C" {
 
 void* kairo_metal_create_device()
@@ -48,6 +50,22 @@ void* kairo_metal_create_buffer(void* deviceHandle, unsigned long long byteSize)
 void kairo_metal_destroy_buffer(void* handle)
 {
     if (handle) CFBridgingRelease(handle);
+}
+
+int kairo_metal_write_buffer(void* handle, const void* source, unsigned long long byteSize)
+{
+    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)handle;
+    if (!buffer || !source || byteSize > buffer.length) return 0;
+    std::memcpy(buffer.contents, source, static_cast<size_t>(byteSize));
+    return 1;
+}
+
+int kairo_metal_read_buffer(void* handle, void* destination, unsigned long long byteSize)
+{
+    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)handle;
+    if (!buffer || !destination || byteSize > buffer.length) return 0;
+    std::memcpy(destination, buffer.contents, static_cast<size_t>(byteSize));
+    return 1;
 }
 
 }

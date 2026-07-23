@@ -35,8 +35,10 @@ KairoGPU starts with a backend-neutral contract:
 
 The current implementation has a bounded Metal resource lifecycle on Apple:
 devices and buffers are real Metal objects and are released with `Device`.
-Kernel compilation, command submission, synchronization, and profiling remain
-unimplemented, so it does not claim GPU tensor execution yet.
+Bounded shared-storage `Upload` and `Download` operations are implemented and
+tested with a real buffer round trip. Kernel compilation, command submission,
+synchronization, and profiling remain unimplemented, so it does not claim GPU
+tensor execution yet.
 
 ## Where It Connects
 
@@ -57,8 +59,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Upload/readback staging and resource binding.
-2. Shader/kernel library for tensor elementwise ops and matmul.
-3. Command submission and synchronization.
-4. GPU profiling.
-5. Vulkan/CUDA/WebGPU backends after the first backend is correct.
+1. Resource binding and shader/kernel library for tensor elementwise ops and matmul.
+2. Command submission and synchronization.
+3. GPU profiling.
+4. Vulkan/CUDA/WebGPU backends after the first backend is correct.
