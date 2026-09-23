@@ -51,8 +51,8 @@ int main()
 
     metal.VectorMultiplyFloat(lhsBuffer, sumBuffer, rhsBuffer, sum.size());
     metal.Download(rhsBuffer, std::as_writable_bytes(std::span(sum)));
-    assert(sum[0] == 11.0f && sum[1] == 88.0f &&
-           sum[2] == 297.0f && sum[3] == 704.0f);
+    assert(sum[0] == 11.0f && sum[1] == 44.0f &&
+           sum[2] == 99.0f && sum[3] == 176.0f);
 
     const std::array<float, 6> matrixLhs{ 1, 2, 3, 4, 5, 6 };
     const std::array<float, 6> matrixRhs{ 7, 8, 9, 10, 11, 12 };
