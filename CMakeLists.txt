@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(KAIRO_GPU_BUILD_BENCHMARK "Build KairoGPU benchmark" ${PROJECT_IS_TOP_LEVEL})
+
 add_library(KairoGPU)
 target_sources(KairoGPU
     PUBLIC
@@ -24,3 +26,9 @@ target_link_libraries(KairoGPUSmoke PRIVATE KairoGPU)
 
 enable_testing()
 add_test(NAME KairoGPUSmoke COMMAND KairoGPUSmoke)
+
+
+if(KAIRO_GPU_BUILD_BENCHMARK)
+    add_executable(KairoGPUBenchmark benchmarks/benchmark.cpp)
+    target_link_libraries(KairoGPUBenchmark PRIVATE KairoGPU)
+endif()
