@@ -28,6 +28,34 @@ int main()
     assert(metal.Capabilities().maxBufferBytes > 0);
     const auto buffer = metal.CreateBuffer({ .byteSize = 4096, .usage = kairo::gpu::BufferUsage::Storage, .debugName = "round-trip" });
     assert(buffer.Valid());
+
+    // Kernel identifiers must never displace the vector slot used for a later
+    // buffer handle. This is a regression check for separated resource domains.
+    const auto markerKernel = metal.CreateKernel({ .name = "marker" });
+    assert(markerKernel.Valid());
+    const auto postKernelBuffer = metal.CreateBuffer(
+        { .byteSize = 16, .usage = kairo::gpu::BufferUsage::Storage, .debugName = "post-kernel-buffer" });
+    const std::array<std::byte, 4> markerBytes{
+        std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}
+    };
+    std::array<std::byte, 4> markerReadback{};
+    metal.Upload(postKernelBuffer, markerBytes);
+    metal.Download(postKernelBuffer, markerReadback);
+    assert(markerReadback == markerBytes);
+
+    auto forgedBuffer = postKernelBuffer;
+    forgedBuffer.desc.byteSize += 1u;
+    bool rejectedForgedDescriptor = false;
+    try
+    {
+        std::array<std::byte, 1> one{};
+        metal.Download(forgedBuffer, one);
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejectedForgedDescriptor = true;
+    }
+    assert(rejectedForgedDescriptor);
     const std::array<std::byte, 4> upload{ std::byte{0x10}, std::byte{0x20}, std::byte{0x30}, std::byte{0x40} };
     std::array<std::byte, 4> download{};
     metal.Upload(buffer, upload);
@@ -88,7 +116,7 @@ int main()
     assert(boundaryOutput == boundaryLhs);
 
     const auto statsBeforeDestroy = metal.Stats();
-    assert(statsBeforeDestroy.liveBuffers >= 9u);
+    assert(statsBeforeDestroy.liveBuffers >= 10u);
     assert(statsBeforeDestroy.allocatedBytes > 0u);
     assert(statsBeforeDestroy.uploadBytes > 0u);
     assert(statsBeforeDestroy.downloadBytes > 0u);
