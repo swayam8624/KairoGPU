@@ -48,6 +48,11 @@ int main()
     metal.Download(rhsBuffer, std::as_writable_bytes(std::span(sum)));
     assert(sum[0] == 12.0f && sum[3] == 48.0f);
 
+    metal.VectorMultiplyFloat(lhsBuffer, sumBuffer, rhsBuffer, sum.size());
+    metal.Download(rhsBuffer, std::as_writable_bytes(std::span(sum)));
+    assert(sum[0] == 11.0f && sum[1] == 88.0f &&
+           sum[2] == 297.0f && sum[3] == 704.0f);
+
     const std::array<float, 6> matrixLhs{ 1, 2, 3, 4, 5, 6 };
     const std::array<float, 6> matrixRhs{ 7, 8, 9, 10, 11, 12 };
     std::array<float, 4> matrixOutput{};
@@ -80,6 +85,43 @@ int main()
     metal.MatMulFloat(boundaryLhsBuffer, boundaryIdentityBuffer, boundaryOutputBuffer, 17, 17, 17);
     metal.Download(boundaryOutputBuffer, std::as_writable_bytes(std::span(boundaryOutput)));
     assert(boundaryOutput == boundaryLhs);
+
+    const auto statsBeforeDestroy = metal.Stats();
+    assert(statsBeforeDestroy.liveBuffers >= 9u);
+    assert(statsBeforeDestroy.allocatedBytes > 0u);
+    assert(statsBeforeDestroy.uploadBytes > 0u);
+    assert(statsBeforeDestroy.downloadBytes > 0u);
+    assert(statsBeforeDestroy.dispatchCount >= 4u);
+    assert(statsBeforeDestroy.totalDispatchNanoseconds > 0u);
+
+    kairo::gpu::Device secondMetal(
+        { .backend = kairo::gpu::Backend::Metal, .debugName = "ownership-smoke" });
+    bool rejectedForeignHandle = false;
+    try
+    {
+        std::array<std::byte, 1> one{};
+        secondMetal.Download(buffer, one);
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejectedForeignHandle = true;
+    }
+    assert(rejectedForeignHandle);
+
+    assert(metal.DestroyBuffer(buffer));
+    assert(!metal.DestroyBuffer(buffer));
+    bool rejectedDestroyedHandle = false;
+    try
+    {
+        std::array<std::byte, 1> one{};
+        metal.Download(buffer, one);
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejectedDestroyedHandle = true;
+    }
+    assert(rejectedDestroyedHandle);
+    assert(metal.Stats().liveBuffers + 1u == statsBeforeDestroy.liveBuffers);
 #endif
     return 0;
 }
