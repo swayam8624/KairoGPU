@@ -1,5 +1,7 @@
 module;
 
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -22,6 +24,7 @@ void kairo_metal_destroy_buffer(void*);
 int kairo_metal_write_buffer(void*, const void*, unsigned long long);
 int kairo_metal_read_buffer(void*, void*, unsigned long long);
 int kairo_metal_vector_add(void*, void*, void*, void*, unsigned long long);
+int kairo_metal_vector_multiply(void*, void*, void*, void*, unsigned long long);
 int kairo_metal_matmul(void*, void*, void*, void*, unsigned int, unsigned int, unsigned int);
 }
 #endif
@@ -71,6 +74,25 @@ export namespace kairo::gpu
         bool supportsUnifiedMemory = false;
     };
 
+    struct DeviceStats final
+    {
+        std::size_t liveBuffers = 0u;
+        std::uint64_t allocatedBytes = 0u;
+        std::uint64_t uploadBytes = 0u;
+        std::uint64_t downloadBytes = 0u;
+        std::uint64_t dispatchCount = 0u;
+        std::uint64_t totalDispatchNanoseconds = 0u;
+        std::uint64_t maxDispatchNanoseconds = 0u;
+
+        [[nodiscard]] double AverageDispatchNanoseconds() const noexcept
+        {
+            return dispatchCount == 0u
+                ? 0.0
+                : static_cast<double>(totalDispatchNanoseconds) /
+                    static_cast<double>(dispatchCount);
+        }
+    };
+
     struct BufferDesc final
     {
         std::size_t byteSize = 0;
@@ -94,6 +116,7 @@ export namespace kairo::gpu
     struct BufferHandle final
     {
         std::uint64_t id = 0;
+        std::uint64_t ownerId = 0;
         BufferDesc desc{};
 
         [[nodiscard]]
@@ -106,6 +129,7 @@ export namespace kairo::gpu
     struct KernelHandle final
     {
         std::uint64_t id = 0;
+        std::uint64_t ownerId = 0;
         KernelDesc desc{};
 
         [[nodiscard]]
@@ -188,7 +212,8 @@ export namespace kairo::gpu
     {
     public:
         explicit Device(DeviceDesc desc = {})
-            : m_desc(std::move(desc))
+            : m_desc(std::move(desc)),
+              m_ownerId(NextOwnerId())
         {
             if (m_desc.backend == Backend::None)
             {
@@ -211,7 +236,8 @@ export namespace kairo::gpu
         ~Device()
         {
 #if defined(KAIRO_GPU_METAL)
-            for (void* buffer : m_nativeBuffers) kairo_metal_destroy_buffer(buffer);
+            for (void* buffer : m_nativeBuffers)
+                if (buffer != nullptr) kairo_metal_destroy_buffer(buffer);
             kairo_metal_destroy_device(m_nativeDevice);
 #endif
         }
@@ -245,6 +271,34 @@ export namespace kairo::gpu
         }
 
         [[nodiscard]]
+        DeviceStats Stats() const noexcept
+        {
+            return m_stats;
+        }
+
+        /// Explicitly destroys one resource before device teardown. Handles are
+        /// never reused; any copied stale handle fails ownership/liveness checks.
+        bool DestroyBuffer(BufferHandle buffer)
+        {
+            if (!buffer.Valid() || buffer.ownerId != m_ownerId ||
+                buffer.id > m_nativeBuffers.size())
+                return false;
+            const std::size_t index = static_cast<std::size_t>(buffer.id - 1u);
+            void*& native = m_nativeBuffers[index];
+            if (native == nullptr) return false;
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal)
+                kairo_metal_destroy_buffer(native);
+#endif
+            native = nullptr;
+            if (m_stats.liveBuffers > 0u) --m_stats.liveBuffers;
+            const std::uint64_t bytes = static_cast<std::uint64_t>(buffer.desc.byteSize);
+            m_stats.allocatedBytes =
+                bytes <= m_stats.allocatedBytes ? m_stats.allocatedBytes - bytes : 0u;
+            return true;
+        }
+
+        [[nodiscard]]
         BufferHandle CreateBuffer(const BufferDesc& desc)
         {
             if (!IsAvailable() || desc.byteSize == 0)
@@ -257,7 +311,9 @@ export namespace kairo::gpu
                 void* buffer = kairo_metal_create_buffer(m_nativeDevice, static_cast<unsigned long long>(desc.byteSize));
                 if (!buffer) throw std::runtime_error("Metal buffer allocation failed.");
                 m_nativeBuffers.push_back(buffer);
-                return { .id = ++m_nextResourceId, .desc = desc };
+                ++m_stats.liveBuffers;
+                m_stats.allocatedBytes += static_cast<std::uint64_t>(desc.byteSize);
+                return { .id = ++m_nextResourceId, .ownerId = m_ownerId, .desc = desc };
             }
 #endif
             throw UnsupportedBackend("GPU buffer allocation is unavailable for this backend.");
@@ -268,17 +324,27 @@ export namespace kairo::gpu
             void* native = NativeBuffer(buffer);
             if (bytes.size() > buffer.desc.byteSize) throw std::invalid_argument("GPU upload exceeds buffer size.");
 #if defined(KAIRO_GPU_METAL)
-            if (m_desc.backend == Backend::Metal && kairo_metal_write_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0) return;
+            if (m_desc.backend == Backend::Metal &&
+                kairo_metal_write_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0)
+            {
+                m_stats.uploadBytes += static_cast<std::uint64_t>(bytes.size());
+                return;
+            }
 #endif
             throw UnsupportedBackend("GPU upload is unavailable for this backend.");
         }
 
-        void Download(BufferHandle buffer, std::span<std::byte> bytes) const
+        void Download(BufferHandle buffer, std::span<std::byte> bytes)
         {
             void* native = NativeBuffer(buffer);
             if (bytes.size() > buffer.desc.byteSize) throw std::invalid_argument("GPU download exceeds buffer size.");
 #if defined(KAIRO_GPU_METAL)
-            if (m_desc.backend == Backend::Metal && kairo_metal_read_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0) return;
+            if (m_desc.backend == Backend::Metal &&
+                kairo_metal_read_buffer(native, bytes.data(), static_cast<unsigned long long>(bytes.size())) != 0)
+            {
+                m_stats.downloadBytes += static_cast<std::uint64_t>(bytes.size());
+                return;
+            }
 #endif
             throw UnsupportedBackend("GPU download is unavailable for this backend.");
         }
@@ -297,10 +363,58 @@ export namespace kairo::gpu
             void* nativeRhs = NativeBuffer(rhs);
             void* nativeOutput = NativeBuffer(output);
 #if defined(KAIRO_GPU_METAL)
-            if (m_desc.backend == Backend::Metal
-                && kairo_metal_vector_add(m_nativeDevice, nativeLhs, nativeRhs, nativeOutput, static_cast<unsigned long long>(count)) != 0) return;
+            if (m_desc.backend == Backend::Metal)
+            {
+                const auto started = std::chrono::steady_clock::now();
+                const int completed = kairo_metal_vector_add(
+                    m_nativeDevice, nativeLhs, nativeRhs, nativeOutput,
+                    static_cast<unsigned long long>(count));
+                const auto finished = std::chrono::steady_clock::now();
+                if (completed != 0)
+                {
+                    RecordDispatch(finished - started);
+                    return;
+                }
+            }
 #endif
             throw UnsupportedBackend("GPU vector add is unavailable for this backend.");
+        }
+
+        /// Element-wise Float32 multiplication on the bounded Metal backend.
+        void VectorMultiplyFloat(
+            BufferHandle lhs,
+            BufferHandle rhs,
+            BufferHandle output,
+            std::size_t count)
+        {
+            if (count == 0 ||
+                count > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) ||
+                lhs.desc.byteSize < count * sizeof(float) ||
+                rhs.desc.byteSize < count * sizeof(float) ||
+                output.desc.byteSize < count * sizeof(float))
+            {
+                throw std::invalid_argument(
+                    "VectorMultiplyFloat buffers are invalid for the requested count.");
+            }
+            void* nativeLhs = NativeBuffer(lhs);
+            void* nativeRhs = NativeBuffer(rhs);
+            void* nativeOutput = NativeBuffer(output);
+#if defined(KAIRO_GPU_METAL)
+            if (m_desc.backend == Backend::Metal)
+            {
+                const auto started = std::chrono::steady_clock::now();
+                const int completed = kairo_metal_vector_multiply(
+                    m_nativeDevice, nativeLhs, nativeRhs, nativeOutput,
+                    static_cast<unsigned long long>(count));
+                const auto finished = std::chrono::steady_clock::now();
+                if (completed != 0)
+                {
+                    RecordDispatch(finished - started);
+                    return;
+                }
+            }
+#endif
+            throw UnsupportedBackend("GPU vector multiply is unavailable for this backend.");
         }
 
         /// Multiplies row-major Float32 matrices [rows, inner] and
@@ -335,15 +449,24 @@ export namespace kairo::gpu
             void* nativeRhs = NativeBuffer(rhs);
             void* nativeOutput = NativeBuffer(output);
 #if defined(KAIRO_GPU_METAL)
-            if (m_desc.backend == Backend::Metal
-                && kairo_metal_matmul(
+            if (m_desc.backend == Backend::Metal)
+            {
+                const auto started = std::chrono::steady_clock::now();
+                const int completed = kairo_metal_matmul(
                     m_nativeDevice,
                     nativeLhs,
                     nativeRhs,
                     nativeOutput,
                     static_cast<unsigned int>(rows),
                     static_cast<unsigned int>(inner),
-                    static_cast<unsigned int>(columns)) != 0) return;
+                    static_cast<unsigned int>(columns));
+                const auto finished = std::chrono::steady_clock::now();
+                if (completed != 0)
+                {
+                    RecordDispatch(finished - started);
+                    return;
+                }
+            }
 #endif
             throw UnsupportedBackend("GPU matrix multiplication is unavailable for this backend.");
         }
@@ -355,20 +478,48 @@ export namespace kairo::gpu
             {
                 throw UnsupportedBackend("Cannot create GPU kernel without a compiled backend.");
             }
-            return { .id = ++m_nextResourceId, .desc = desc };
+            return { .id = ++m_nextResourceId, .ownerId = m_ownerId, .desc = desc };
         }
 
     private:
         DeviceDesc m_desc;
-        std::uint64_t m_nextResourceId = 0;
+        std::uint64_t m_ownerId = 0u;
+        std::uint64_t m_nextResourceId = 0u;
         void* m_nativeDevice = nullptr;
         std::vector<void*> m_nativeBuffers;
+        DeviceStats m_stats{};
+
+        [[nodiscard]] static std::uint64_t NextOwnerId() noexcept
+        {
+            static std::atomic<std::uint64_t> next{ 1u };
+            return next.fetch_add(1u, std::memory_order_relaxed);
+        }
+
+        template<typename Rep, typename Period>
+        void RecordDispatch(std::chrono::duration<Rep, Period> duration) noexcept
+        {
+            const auto nanoseconds =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+            const std::uint64_t elapsed = nanoseconds > 0
+                ? static_cast<std::uint64_t>(nanoseconds)
+                : 0u;
+            ++m_stats.dispatchCount;
+            m_stats.totalDispatchNanoseconds += elapsed;
+            if (elapsed > m_stats.maxDispatchNanoseconds)
+                m_stats.maxDispatchNanoseconds = elapsed;
+        }
 
         [[nodiscard]]
         void* NativeBuffer(BufferHandle buffer) const
         {
-            if (!buffer.Valid() || buffer.id > m_nativeBuffers.size()) throw std::invalid_argument("GPU buffer handle is not owned by this device.");
-            return m_nativeBuffers[static_cast<std::size_t>(buffer.id - 1)];
+            if (!buffer.Valid() || buffer.ownerId != m_ownerId ||
+                buffer.id > m_nativeBuffers.size())
+                throw std::invalid_argument(
+                    "GPU buffer handle is not owned by this device.");
+            void* native = m_nativeBuffers[static_cast<std::size_t>(buffer.id - 1u)];
+            if (native == nullptr)
+                throw std::invalid_argument("GPU buffer handle refers to a destroyed resource.");
+            return native;
         }
     };
 
