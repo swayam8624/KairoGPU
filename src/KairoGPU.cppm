@@ -286,13 +286,17 @@ export namespace kairo::gpu
             const std::size_t index = static_cast<std::size_t>(buffer.id - 1u);
             void*& native = m_nativeBuffers[index];
             if (native == nullptr) return false;
+            if (buffer.desc.byteSize != m_nativeBufferBytes[index])
+                return false;
 #if defined(KAIRO_GPU_METAL)
             if (m_desc.backend == Backend::Metal)
                 kairo_metal_destroy_buffer(native);
 #endif
             native = nullptr;
             if (m_stats.liveBuffers > 0u) --m_stats.liveBuffers;
-            const std::uint64_t bytes = static_cast<std::uint64_t>(buffer.desc.byteSize);
+            const std::uint64_t bytes =
+                static_cast<std::uint64_t>(m_nativeBufferBytes[index]);
+            m_nativeBufferBytes[index] = 0u;
             m_stats.allocatedBytes =
                 bytes <= m_stats.allocatedBytes ? m_stats.allocatedBytes - bytes : 0u;
             return true;
@@ -311,9 +315,14 @@ export namespace kairo::gpu
                 void* buffer = kairo_metal_create_buffer(m_nativeDevice, static_cast<unsigned long long>(desc.byteSize));
                 if (!buffer) throw std::runtime_error("Metal buffer allocation failed.");
                 m_nativeBuffers.push_back(buffer);
+                m_nativeBufferBytes.push_back(desc.byteSize);
                 ++m_stats.liveBuffers;
                 m_stats.allocatedBytes += static_cast<std::uint64_t>(desc.byteSize);
-                return { .id = ++m_nextResourceId, .ownerId = m_ownerId, .desc = desc };
+                return {
+                    .id = static_cast<std::uint64_t>(m_nativeBuffers.size()),
+                    .ownerId = m_ownerId,
+                    .desc = desc
+                };
             }
 #endif
             throw UnsupportedBackend("GPU buffer allocation is unavailable for this backend.");
@@ -478,15 +487,16 @@ export namespace kairo::gpu
             {
                 throw UnsupportedBackend("Cannot create GPU kernel without a compiled backend.");
             }
-            return { .id = ++m_nextResourceId, .ownerId = m_ownerId, .desc = desc };
+            return { .id = ++m_nextKernelId, .ownerId = m_ownerId, .desc = desc };
         }
 
     private:
         DeviceDesc m_desc;
         std::uint64_t m_ownerId = 0u;
-        std::uint64_t m_nextResourceId = 0u;
+        std::uint64_t m_nextKernelId = 0u;
         void* m_nativeDevice = nullptr;
         std::vector<void*> m_nativeBuffers;
+        std::vector<std::size_t> m_nativeBufferBytes;
         DeviceStats m_stats{};
 
         [[nodiscard]] static std::uint64_t NextOwnerId() noexcept
@@ -516,9 +526,12 @@ export namespace kairo::gpu
                 buffer.id > m_nativeBuffers.size())
                 throw std::invalid_argument(
                     "GPU buffer handle is not owned by this device.");
-            void* native = m_nativeBuffers[static_cast<std::size_t>(buffer.id - 1u)];
+            const std::size_t index = static_cast<std::size_t>(buffer.id - 1u);
+            void* native = m_nativeBuffers[index];
             if (native == nullptr)
                 throw std::invalid_argument("GPU buffer handle refers to a destroyed resource.");
+            if (buffer.desc.byteSize != m_nativeBufferBytes[index])
+                throw std::invalid_argument("GPU buffer descriptor does not match the owned resource.");
             return native;
         }
     };
