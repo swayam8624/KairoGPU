@@ -2,6 +2,7 @@
 #include <bit>
 #include <cassert>
 #include <span>
+#include <stdexcept>
 
 import Kairo.GPU;
 
