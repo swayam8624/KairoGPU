@@ -1,0 +1,50 @@
+id: R7
+name: Frame-Budget-Aware Heterogeneous Inference
+repo: KairoGPU
+supporting_repos: [KairoScheduler, KairoSIMD, KairoMath, KairoONNX, KairoTransformers]
+stage: engineering_prerequisite
+engineering_dependency:
+  KairoGPU:
+    required_score: 80
+    status: source_complete_metal_v1
+  KairoScheduler:
+    required_score: 80
+    status: source_complete
+  later_wave_dependencies: [KairoONNX, KairoTransformers]
+problem: interactive tensor workloads mix CPU-favored and GPU-favored operations under a frame deadline
+hypothesis: online deadline-aware device selection with transfer/residency accounting can reduce deadline misses versus fixed CPU/GPU/static-threshold policies
+falsification:
+  - adaptive overhead eliminates mixed-workload gains
+  - device migration thrashes
+  - static mapping dominates representative workloads
+baselines:
+  - cpu_reference
+  - cpu_simd
+  - metal_only
+  - fixed_size_threshold
+  - offline_profiled_static
+workloads:
+  normal: [mlp, conv_block, compact_attention]
+  mixed: [tiny_large_chain, burst_inference]
+  system: [idle, cpu_contention, gpu_contention, cold_buffers, warm_buffers]
+  adversarial: [tiny_kernel_only, alternating_contention]
+metrics:
+  - inference_ns
+  - p95_ns
+  - p99_ns
+  - missed_deadlines
+  - tokens_or_samples_per_second
+  - transfer_bytes
+  - dispatch_count
+  - peak_bytes
+  - max_abs_error
+required_artifacts:
+  - raw_json
+  - summary_csv
+  - timeline_diagram
+  - crossover_plot
+  - contention_plot
+  - ablations
+  - failure_cases
+  - reproducibility_manifest
+claim_status: unproven
