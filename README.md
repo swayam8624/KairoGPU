@@ -35,18 +35,20 @@ KairoGPU starts with a backend-neutral contract:
 - explicit `UnsupportedBackend` failure for unlinked backends and for kernels
   that do not yet have a validated command implementation.
 
-The current implementation has a bounded Metal resource lifecycle on Apple:
-devices and buffers are real Metal objects and are released with `Device`.
-Bounded shared-storage `Upload` and `Download` operations are implemented and
-tested with a real buffer round trip. `Device::VectorAddFloat` compiles and
-submits one fixed Metal compute kernel, waits for its completion, and is tested
-through GPU buffer readback. Its compiled pipeline and command queue are cached
-and reused across dispatches. `Device::MatMulFloat` adds row-major Float32
-matrix multiplication with a cached 16-by-16 threadgroup-tiled Metal kernel;
-tests cover both a known rectangular product and dimensions crossing a tile
-boundary. This is still a bounded kernel library, not a general shader system:
-it has no generic resource-binding API, asynchronous queue, autograd, or
-profiler.
+The frozen v1 implementation is intentionally a bounded **Metal compute
+runtime**, not a claim of four finished GPU backends. Devices and buffers are
+real Metal objects. Buffer handles carry a device-owner identity, destroyed and
+foreign handles fail closed, allocation size is checked against device-owned
+metadata, and buffer/kernel identifier spaces cannot alias. Shared-storage
+`Upload`/`Download`, explicit buffer destruction, Float32 vector add,
+element-wise multiply, and row-major 16-by-16 tiled matrix multiplication are
+covered by native smoke paths.
+
+`DeviceStats` records live/allocated buffers, upload/download bytes, dispatch
+count, and host-observed synchronous dispatch duration. This is useful
+regression telemetry but is not presented as GPU hardware timestamp data.
+Generic shader binding and asynchronous command submission remain outside the
+v1 80% scope.
 
 ## Where It Connects
 
@@ -65,9 +67,15 @@ ctest --test-dir build --output-on-failure
 ./build/KairoGPUSmoke
 ```
 
-## Roadmap
+## Frozen V1 And Later Work
 
-1. Resource binding and a broader elementwise kernel library.
-2. Reductions and explicit asynchronous submission/synchronization.
-3. GPU profiling and tensor-runtime backend dispatch.
-4. Vulkan/CUDA/WebGPU backends after the first backend is correct.
+Wave B freezes v1 around the validated Metal path. Build the optional benchmark
+with `-DKAIRO_GPU_BUILD_BENCHMARK=ON`; it emits
+`kairo.gpu.benchmark.v1` JSON for a one-million-element workload.
+
+Generic resource binding, asynchronous submission, hardware timestamp queries,
+additional reductions, and Vulkan/CUDA/WebGPU implementations are v2 work.
+They are deliberately excluded from the v1 completion denominator rather than
+represented as partially implemented backends.
+
+See [STATUS.md](STATUS.md) for the exact scope and limitations.
