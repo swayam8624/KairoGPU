@@ -1,24 +1,19 @@
-# KairoGPU Status
+# KairoGPU v1 Status
 
-Wave: B — bounded compute-backend completion  
-Frozen v1 target: 80/100  
-Source gate: complete for the reduced Metal-v1 scope  
-Native gate: Apple Metal smoke + benchmark
+**Target: 95%. Current completion claim: UNVERIFIED.**
 
-## Frozen v1 scope
+The earlier percentage claim has been retracted. A frozen scope or a populated
+`STATUS.yaml` is not evidence that this repository builds, runs, or satisfies
+its integration contract.
 
-KairoGPU v1 is deliberately **not** a Metal/Vulkan/CUDA/WebGPU implementation matrix. V1 freezes one production-quality Apple Metal compute path behind a backend-neutral API: device discovery/capabilities, owned buffers, bounded upload/readback, validated Float32 add/multiply/matmul kernels, explicit resource destruction and measurable synchronous dispatch telemetry. Other backends remain v2.
+Current rules:
 
-## 80 exit evidence
+- `target_score: 95` is a target only.
+- `completion_score: unverified` remains until exact-head acceptance executes.
+- source/test failures block completion regardless of documentation state.
+- platform-gated behavior is not inferred from another host.
+- post-v1 exclusions may bound scope, but they cannot hide missing v1 behavior.
 
-- Buffer handles carry device ownership and stale/foreign handles fail closed.
-- Buffer and kernel identities use separate domains; buffer IDs cannot be displaced by kernel creation.
-- Device-side allocation size is authoritative rather than trusting a caller-modified handle descriptor.
-- Explicit buffer destruction and double-destroy/stale-use tests exist.
-- Metal vector add, vector multiply and tiled matrix multiplication have numerical smoke coverage.
-- DeviceStats tracks live/allocated resources, transfer volume and host-observed synchronous dispatch latency.
-- A machine-readable Metal benchmark exercises a one-million-element workload.
-
-## Explicit limitations
-
-The dispatch timing is host-observed command completion time, not GPU hardware timestamp-query time. Submission remains synchronous. Generic shader/resource binding, asynchronous queues, Vulkan, CUDA and WebGPU are outside the v1 80% scope and must not be marketed as implemented.
+Use the repository's real build/test gate and the KairoGameEngine portfolio
+acceptance runner. Do not cite this repository as 95% complete until the
+accepted exact-head evidence matches the current revision.
