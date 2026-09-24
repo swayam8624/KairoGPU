@@ -18,7 +18,10 @@ target_sources(KairoGPU
 if(APPLE)
     target_sources(KairoGPU PRIVATE src/KairoMetal.mm)
     target_compile_definitions(KairoGPU PUBLIC KAIRO_GPU_METAL=1)
-    target_link_libraries(KairoGPU PRIVATE "-framework Metal" "-framework Foundation")
+    target_link_libraries(KairoGPU PRIVATE
+        "-framework Metal"
+        "-framework Foundation"
+        "-lobjc")
 endif()
 
 add_executable(KairoGPUSmoke tests/smoke.cpp)
