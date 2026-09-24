@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
-project(KairoGPU LANGUAGES CXX OBJCXX)
+project(KairoGPU LANGUAGES CXX)
+
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
