@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(KAIRO_GPU_BUILD_BENCHMARK "Build KairoGPU benchmark" ${PROJECT_IS_TOP_LEVEL})
 
 add_library(KairoGPU)
+set_property(TARGET KairoGPU PROPERTY COMPILE_WARNING_AS_ERROR ON)
 target_sources(KairoGPU
     PUBLIC
         FILE_SET CXX_MODULES
