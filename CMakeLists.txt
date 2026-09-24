@@ -39,6 +39,7 @@ endif()
 
 add_executable(KairoGPUSmoke tests/smoke.cpp)
 target_link_libraries(KairoGPUSmoke PRIVATE KairoGPU)
+set_property(TARGET KairoGPUSmoke PROPERTY COMPILE_WARNING_AS_ERROR ON)
 
 enable_testing()
 add_test(NAME KairoGPUSmoke COMMAND KairoGPUSmoke)
@@ -47,4 +48,5 @@ add_test(NAME KairoGPUSmoke COMMAND KairoGPUSmoke)
 if(KAIRO_GPU_BUILD_BENCHMARK)
     add_executable(KairoGPUBenchmark benchmarks/benchmark.cpp)
     target_link_libraries(KairoGPUBenchmark PRIVATE KairoGPU)
+    set_property(TARGET KairoGPUBenchmark PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()
