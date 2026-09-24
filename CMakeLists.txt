@@ -22,6 +22,14 @@ target_sources(KairoGPU
 
 if(APPLE)
     target_sources(KairoGPU PRIVATE src/KairoMetal.mm)
+    set(_kairo_gpu_metal_compile_options -fobjc-arc)
+    if(CMAKE_OBJCXX_COMPILER_ID STREQUAL "Clang" AND
+       CMAKE_OBJCXX_COMPILER_VERSION VERSION_GREATER_EQUAL 23)
+        list(APPEND _kairo_gpu_metal_compile_options
+            -fno-objc-msgsend-selector-stubs)
+    endif()
+    set_source_files_properties(src/KairoMetal.mm PROPERTIES
+        COMPILE_OPTIONS "${_kairo_gpu_metal_compile_options}")
     target_compile_definitions(KairoGPU PUBLIC KAIRO_GPU_METAL=1)
     target_link_libraries(KairoGPU PRIVATE
         "-framework Metal"
