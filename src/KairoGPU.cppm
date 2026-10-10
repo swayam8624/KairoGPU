@@ -314,8 +314,28 @@ export namespace kairo::gpu
             {
                 void* buffer = kairo_metal_create_buffer(m_nativeDevice, static_cast<unsigned long long>(desc.byteSize));
                 if (!buffer) throw std::runtime_error("Metal buffer allocation failed.");
-                m_nativeBuffers.push_back(buffer);
-                m_nativeBufferBytes.push_back(desc.byteSize);
+                // Keep native ownership and both indexing vectors consistent
+                // if vector growth throws (e.g. host memory pressure). Without
+                // rollback, a second push_back failure leaves a leaked Metal
+                // allocation and mismatched resource descriptor tables.
+                try
+                {
+                    m_nativeBuffers.push_back(buffer);
+                    try
+                    {
+                        m_nativeBufferBytes.push_back(desc.byteSize);
+                    }
+                    catch (...)
+                    {
+                        m_nativeBuffers.pop_back();
+                        throw;
+                    }
+                }
+                catch (...)
+                {
+                    kairo_metal_destroy_buffer(buffer);
+                    throw;
+                }
                 ++m_stats.liveBuffers;
                 m_stats.allocatedBytes += static_cast<std::uint64_t>(desc.byteSize);
                 return {
