@@ -1,3 +1,9 @@
+// SOURCE STUDY NOTE:
+// Objective-C++ Metal bridge for device/resources and supported compute kernels called from
+// KairoGPU.cppm. Device and command-buffer lifetimes must be managed across this C++/Objective-C
+// boundary.
+// Cross-file guide: docs/SOURCE_READING_ORDER.md.
+
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <dispatch/dispatch.h>
