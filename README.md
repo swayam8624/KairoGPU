@@ -1,3 +1,7 @@
+> **Source study:** [READING_ORDER.md](READING_ORDER.md) links the files in a recommended conceptual order, explaining important APIs and cross-file interactions.
+>
+> **Open source:** Original KairoGPU code uses [MIT](LICENSE), permitting education and further development; outside SDKs and assets have separate terms. This initial guide does not mean every function is yet annotated or the native toolchain has been rerun.
+
 # KairoGPU
 
 KairoGPU is the GPU backend abstraction for the Kairo ML stack. It defines how

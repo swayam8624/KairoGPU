@@ -1,3 +1,9 @@
+// TEACHING MAP — tests/smoke.cpp
+// Checks the public GPU API, selected native Metal paths and explicit unsupported
+// behavior. Compare outputs against scalar references, and distinguish an unrun host gate
+// from a successful test.
+// Read READING_ORDER.md for public APIs, call paths, preconditions and tests.
+
 // CI builds Release binaries (NDEBUG), but this smoke executable must still
 // evaluate every regression assertion and the guarded side effects.
 #if defined(NDEBUG)

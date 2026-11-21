@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoMetal.mm
+// Objective-C++ bridge that owns Metal device and buffer lifetimes and dispatches
+// supported kernels. Functions exported through a C ABI are called from KairoGPU.cppm;
+// callers must observe synchronization and buffer validity.
+// Read READING_ORDER.md for public APIs, call paths, preconditions and tests.
+
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <dispatch/dispatch.h>
