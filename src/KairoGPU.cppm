@@ -1,3 +1,4 @@
+// TEACHING MAP: Backend-neutral device, buffer and dispatch abstraction for Kairo compute/ML consumers; src/KairoMetal.mm implements selected native Metal operations. Unsupported APIs must fail explicitly, not emulate completed GPU features.
 module;
 
 #include <atomic>
