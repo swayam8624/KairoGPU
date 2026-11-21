@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoGPU.cppm
+// Exports GPU device, capabilities, buffers, command lists and validated kernel dispatch.
+// Its extern C Metal calls are implemented in KairoMetal.mm; Backend enum values for
+// Vulkan, CUDA or WebGPU are not evidence those backends execute.
+// Read READING_ORDER.md for public APIs, call paths, preconditions and tests.
+
 module;
 
 #include <atomic>
