@@ -1,3 +1,9 @@
+// SOURCE STUDY NOTE:
+// Backend-neutral GPU compute API with buffers, kernels and command handling. Bridges to
+// src/KairoMetal.mm when Metal is available; other backend names are capability choices, not full native
+// implementations.
+// Cross-file guide: docs/SOURCE_READING_ORDER.md.
+
 module;
 
 #include <atomic>
