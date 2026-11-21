@@ -1,3 +1,8 @@
+// TEACHING MAP — benchmarks/benchmark.cpp
+// Measures GPU transfers, execution and synchronization with public device/command APIs.
+// Time allocation and host↔GPU copies separately before claiming compute speedups.
+// Read READING_ORDER.md for public APIs, call paths, preconditions and tests.
+
 #include <array>
 #include <chrono>
 #include <cstddef>
