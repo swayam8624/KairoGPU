@@ -2,7 +2,7 @@
 
 Backend-neutral tensor compute contract with bounded real Metal execution.
 
-**Start with the worked guide:** [Metal devices, buffer ownership, Float32 operations and transfer timing](GPU_DEVICE_LIFECYCLE.md).
+**Start with the worked guide:** [Metal devices, buffer ownership, Float32 operations and transfer timing](GPU_DEVICE_LIFECYCLE.md). Then study [native command encoding, synchronization and tiled shader execution](METAL_COMPUTE_PIPELINE_LAB.md).
 
 Follow source links sequentially. For each API/function, identify its input contract, owning data structure, called modules, failure modes, outputs, test and downstream consumers.
 
