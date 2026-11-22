@@ -1,4 +1,19 @@
-// TEACHING MAP: Backend-neutral device, buffer and dispatch abstraction for Kairo compute/ML consumers; src/KairoMetal.mm implements selected native Metal operations. Unsupported APIs must fail explicitly, not emulate completed GPU features.
+// TEACHING MAP: Kairo.GPU defines a bounded compute API, not the complete
+// graphics RendererRuntime or a universal CUDA/Vulkan/Metal execution stack.
+// This build implements selected native Metal Float32 vector-add,
+// multiply and row-major matrix multiply through a C ABI bridge.
+//
+// Device owns its native device and buffers by an owner ID; BufferHandle
+// carries id, ownerId and BufferDesc. Upload/Download are explicit CPU-GPU
+// transfers, and stale/foreign handles are rejected at NativeBuffer.
+// A command-list description and kernel handles exist, but do not imply
+// general arbitrary user-kernel compilation/dispatch is implemented.
+//
+// KairoMath TensorGPU and ML/ONNX consumers must check compiled backend,
+// actual DeviceCapabilities and supported kernels. Host CPU timing of a
+// Metal bridge call is not necessarily GPU kernel-only execution timing.
+// See src/KairoMetal.mm and tests/smoke.cpp for exact supported operations.
+
 module;
 
 #include <atomic>
@@ -209,6 +224,9 @@ export namespace kairo::gpu
         }
     };
 
+    // Owns one native compute backend and all buffers allocated by it.
+    // No copied/moved device: ownership identity binds every BufferHandle
+    // and teardown releases still-live resources.
     class Device final
     {
     public:
@@ -279,6 +297,9 @@ export namespace kairo::gpu
 
         /// Explicitly destroys one resource before device teardown. Handles are
         /// never reused; any copied stale handle fails ownership/liveness checks.
+        // Reject handles from a different Device, destroyed buffers
+        // and mismatched sizes. IDs are not reused while the owner lives,
+        // so stale copies do not silently become valid.
         bool DestroyBuffer(BufferHandle buffer)
         {
             if (!buffer.Valid() || buffer.ownerId != m_ownerId ||
@@ -304,6 +325,9 @@ export namespace kairo::gpu
         }
 
         [[nodiscard]]
+        // Validate nonzero allocation size, native capability, buffer
+        // budget and addressability before creating a device allocation.
+        // Descriptor byte size is separate from resident native overhead.
         BufferHandle CreateBuffer(const BufferDesc& desc)
         {
             if (!IsAvailable() || desc.byteSize == 0)
@@ -349,6 +373,9 @@ export namespace kairo::gpu
             throw UnsupportedBackend("GPU buffer allocation is unavailable for this backend.");
         }
 
+        // Explicit host-to-device payload transfer. Callers must
+        // synchronize any ongoing GPU readers/writers and respect
+        // the target buffer capacity and element interpretation.
         void Upload(BufferHandle buffer, std::span<const std::byte> bytes)
         {
             void* native = NativeBuffer(buffer);
@@ -364,6 +391,9 @@ export namespace kairo::gpu
             throw UnsupportedBackend("GPU upload is unavailable for this backend.");
         }
 
+        // Copy results to caller-owned CPU memory. The backend controls
+        // completion semantics; do not treat buffer pointers as shared
+        // portable host memory merely because Apple unified memory exists.
         void Download(BufferHandle buffer, std::span<std::byte> bytes)
         {
             void* native = NativeBuffer(buffer);
@@ -449,6 +479,9 @@ export namespace kairo::gpu
 
         /// Multiplies row-major Float32 matrices [rows, inner] and
         /// [inner, columns] into [rows, columns] on the Metal compute device.
+        // This is explicitly Float32 row-major GEMM, with dimensional
+        // products checked against overflow and buffer capacities.
+        // No generic mixed-precision GEMM guarantee is implied.
         void MatMulFloat(
             BufferHandle lhs,
             BufferHandle rhs,
