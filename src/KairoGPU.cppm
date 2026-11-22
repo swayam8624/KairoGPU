@@ -227,9 +227,16 @@ export namespace kairo::gpu
     // Owns one native compute backend and all buffers allocated by it.
     // No copied/moved device: ownership identity binds every BufferHandle
     // and teardown releases still-live resources.
+    // Teaching continuation: docs/METAL_COMPUTE_PIPELINE_LAB.md traces the full
+    // public API -> C ABI -> Objective-C++ Metal dispatch -> readback path.
+    // A Device is not internally synchronized for concurrent client mutation:
+    // callers must coordinate resource creation/destruction and command use.
     class Device final
     {
     public:
+        // Select one compiled backend and mint an owner identity. A Backend
+        // enum case does not imply the implementation is linked; unsupported
+        // selections throw instead of pretending a CPU fallback is a GPU.
         explicit Device(DeviceDesc desc = {})
             : m_desc(std::move(desc)),
               m_ownerId(NextOwnerId())
@@ -252,6 +259,8 @@ export namespace kairo::gpu
         Device(const Device&) = delete;
         Device& operator=(const Device&) = delete;
 
+        // RAII teardown releases still-live MTLBuffer references first and
+        // then the retained MTLDevice. Never use copied BufferHandles afterward.
         ~Device()
         {
 #if defined(KAIRO_GPU_METAL)
@@ -274,6 +283,8 @@ export namespace kairo::gpu
         }
 
         [[nodiscard]]
+        // Capabilities are native bridge observations, not a list of every
+        // implemented operation: current compute entrypoints remain Float32.
         DeviceCapabilities Capabilities() const noexcept
         {
 #if defined(KAIRO_GPU_METAL)
@@ -328,6 +339,10 @@ export namespace kairo::gpu
         // Validate nonzero allocation size, native capability, buffer
         // budget and addressability before creating a device allocation.
         // Descriptor byte size is separate from resident native overhead.
+        // Bridge newBufferWithLength in KairoMetal.mm; register its pointer
+        // and byte size in parallel tables with exception-safe rollback.
+        // The returned handle identifies this device and does not expose the
+        // Objective-C buffer pointer or create a host-side Tensor.
         BufferHandle CreateBuffer(const BufferDesc& desc)
         {
             if (!IsAvailable() || desc.byteSize == 0)
@@ -376,6 +391,9 @@ export namespace kairo::gpu
         // Explicit host-to-device payload transfer. Callers must
         // synchronize any ongoing GPU readers/writers and respect
         // the target buffer capacity and element interpretation.
+        // Contract: a borrowed contiguous byte span is copied into shared
+        // Metal storage. No shape/dtype transformation occurs. TensorGPU must
+        // materialize strided views and calculate required byte lengths.
         void Upload(BufferHandle buffer, std::span<const std::byte> bytes)
         {
             void* native = NativeBuffer(buffer);
@@ -394,6 +412,9 @@ export namespace kairo::gpu
         // Copy results to caller-owned CPU memory. The backend controls
         // completion semantics; do not treat buffer pointers as shared
         // portable host memory merely because Apple unified memory exists.
+        // Contract: copy from native shared storage into caller-owned CPU
+        // bytes. The supported native compute calls are synchronous, but a
+        // future async path would require explicit completion coordination.
         void Download(BufferHandle buffer, std::span<std::byte> bytes)
         {
             void* native = NativeBuffer(buffer);
@@ -411,6 +432,9 @@ export namespace kairo::gpu
 
         /// Runs a bounded Float32 vector addition on the Metal compute device.
         /// All buffers must be owned by this device and contain `count` floats.
+        // One logical Float32 output per index. After ownership/size checks,
+        // call the native MSL pipeline and wait for command completion there.
+        // RecordDispatch measures host-visible dispatch+wait, not GPU-only time.
         void VectorAddFloat(BufferHandle lhs, BufferHandle rhs, BufferHandle output, std::size_t count)
         {
             if (count == 0 || count > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())
@@ -441,6 +465,8 @@ export namespace kairo::gpu
         }
 
         /// Element-wise Float32 multiplication on the bounded Metal backend.
+        // Same buffer/ownership and synchronous-dispatch contract as Add;
+        // the MSL kernel uses multiplication rather than addition.
         void VectorMultiplyFloat(
             BufferHandle lhs,
             BufferHandle rhs,
@@ -482,6 +508,9 @@ export namespace kairo::gpu
         // This is explicitly Float32 row-major GEMM, with dimensional
         // products checked against overflow and buffer capacities.
         // No generic mixed-precision GEMM guarantee is implied.
+        // Float32 row-major [rows,inner] x [inner,columns] only. The bridge
+        // executes a fixed 16x16 threadgroup-tiled MSL GEMM with barriers and
+        // zero-padding for partial tiles; not general mixed-precision GEMM.
         void MatMulFloat(
             BufferHandle lhs,
             BufferHandle rhs,
@@ -535,6 +564,9 @@ export namespace kairo::gpu
         }
 
         [[nodiscard]]
+        // Metadata/identifier creation ONLY: this does not compile arbitrary
+        // MSL or provide a generic Submit(CommandList) implementation.
+        // Keep kernel IDs separate from buffer IDs to avoid resource aliasing.
         KernelHandle CreateKernel(const KernelDesc& desc)
         {
             if (!IsAvailable())
@@ -574,6 +606,10 @@ export namespace kairo::gpu
         }
 
         [[nodiscard]]
+        // Internal conversion from public capability handle to native pointer.
+        // Reject foreign, stale or size-forged handles before the C ABI call.
+        // Only size is checked against recorded metadata: usage/debugName are
+        // not separately verified as authentic fields in this version.
         void* NativeBuffer(BufferHandle buffer) const
         {
             if (!buffer.Valid() || buffer.ownerId != m_ownerId ||
