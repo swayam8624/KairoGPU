@@ -1,3 +1,17 @@
+// TEACHING NATIVE BRIDGE: C++ Kairo.GPU's `extern "C"` functions
+// delegate selected buffer and Float32 compute operations to Objective-C++
+// Metal APIs. MTLDevice and MTLBuffer objects are returned as opaque void*
+// handles with explicit bridging retain/release ownership.
+//
+// Each native kernel path must check shader library/function, pipeline
+// creation, buffer lengths, dispatch dimensions and command completion.
+// The public device capabilities report a bounded feature set; a
+// platform's generic Metal availability is not a promise of every
+// tensor or arbitrary kernel operation.
+//
+// The Device wrapper owns the Metal device and buffers. This bridge
+// should never be called with a stale/foreign device or destroyed buffer.
+// Explicit upload/download is required by the higher-level TensorGPU API.
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <dispatch/dispatch.h>
@@ -6,6 +20,8 @@
 
 extern "C" {
 
+// Retain the Objective-C MTLDevice for the C++ wrapper. The matching
+// kairo_metal_destroy_device releases this ownership exactly once.
 void* kairo_metal_create_device()
 {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
@@ -69,6 +85,8 @@ int kairo_metal_read_buffer(void* handle, void* destination, unsigned long long 
     return 1;
 }
 
+// Compute Float32 elementwise addition with a Metal command.
+ // Caller must supply three valid MTLBuffers of sufficient size.
 int kairo_metal_vector_add(void* deviceHandle, void* lhsHandle, void* rhsHandle, void* outputHandle, unsigned long long count)
 {
     id<MTLDevice> device = (__bridge id<MTLDevice>)deviceHandle;
