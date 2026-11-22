@@ -22,6 +22,9 @@ extern "C" {
 
 // Retain the Objective-C MTLDevice for the C++ wrapper. The matching
 // kairo_metal_destroy_device releases this ownership exactly once.
+// C ABI ownership boundary: MTLCreateSystemDefaultDevice returns an ARC-
+// managed Objective-C object; CFBridgingRetain gives C++ Device a +1 retain
+// released by kairo_metal_destroy_device during Device teardown.
 void* kairo_metal_create_device()
 {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
@@ -56,6 +59,9 @@ int kairo_metal_supports_unified_memory(void* handle)
     return device && device.hasUnifiedMemory;
 }
 
+// Allocate a shared-storage Metal buffer. Shared means CPU-visible contents
+// for this native implementation; it is NOT a portable GPU synchronization
+// policy. The C++ wrapper registers the retained native buffer in its table.
 void* kairo_metal_create_buffer(void* deviceHandle, unsigned long long byteSize)
 {
     id<MTLDevice> device = (__bridge id<MTLDevice>)deviceHandle;
@@ -69,6 +75,8 @@ void kairo_metal_destroy_buffer(void* handle)
     if (handle) CFBridgingRelease(handle);
 }
 
+// Raw host-byte transfer into MTLBuffer.contents. This helper checks the
+// native buffer length but knows nothing about Tensor strides or Float32.
 int kairo_metal_write_buffer(void* handle, const void* source, unsigned long long byteSize)
 {
     id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)handle;
@@ -77,6 +85,8 @@ int kairo_metal_write_buffer(void* handle, const void* source, unsigned long lon
     return 1;
 }
 
+// Reverse memcpy into caller-provided CPU bytes; callers must ensure the
+// relevant GPU command completed first (current dispatch waits synchronously).
 int kairo_metal_read_buffer(void* handle, void* destination, unsigned long long byteSize)
 {
     id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)handle;
@@ -87,6 +97,12 @@ int kairo_metal_read_buffer(void* handle, void* destination, unsigned long long 
 
 // Compute Float32 elementwise addition with a Metal command.
  // Caller must supply three valid MTLBuffers of sufficient size.
+// Vector Float32 path: on first use compile embedded MSL to a pipeline and
+// queue, then encode buffers at bindings 0..2 and count at binding 3.
+// dispatch_once keeps these objects process-scoped, NOT per-device. A future
+// multi-device runtime must review pipeline/queue device compatibility.
+// WaitUntilCompleted makes this call synchronous; the C++ timer includes
+// compile/encode/submit/wait overhead, not GPU hardware kernel time alone.
 int kairo_metal_vector_add(void* deviceHandle, void* lhsHandle, void* rhsHandle, void* outputHandle, unsigned long long count)
 {
     id<MTLDevice> device = (__bridge id<MTLDevice>)deviceHandle;
@@ -122,6 +138,8 @@ int kairo_metal_vector_add(void* deviceHandle, void* lhsHandle, void* rhsHandle,
     return command.status == MTLCommandBufferStatusCompleted && !command.error;
 }
 
+// Multiplication mirrors Add's binding scheme and wait semantics. Each GPU
+// thread writes at most one Float32 output, guarded by its grid index.
 int kairo_metal_vector_multiply(
     void* deviceHandle,
     void* lhsHandle,
@@ -172,6 +190,12 @@ int kairo_metal_vector_multiply(
     return command.status == MTLCommandBufferStatusCompleted && !command.error;
 }
 
+// Tiled Float32 GEMM, row-major [rows,inner] * [inner,columns]. Each 16x16
+// threadgroup loads two threadgroup-memory tiles per K step, synchronizes
+// before consumption and before overwriting tile storage, then stores one
+// output per valid (row,column). Padding lanes load zeros; 17x17 exercises
+// this edge case in tests/smoke.cpp. The pipeline/queue are first-device
+// process-wide statics, and the returned result is synchronous.
 int kairo_metal_matmul(
     void* deviceHandle,
     void* lhsHandle,
