@@ -1,6 +1,6 @@
 # KairoGPU
 
-**Study the implementation:** [linked source-reading order](docs/SOURCE_READING_ORDER.md) · [Metal buffer ownership and compute/transfer APIs](docs/GPU_DEVICE_LIFECYCLE.md).
+**Study the implementation:** [linked source-reading order](docs/SOURCE_READING_ORDER.md) · [Metal buffer ownership and compute/transfer APIs](docs/GPU_DEVICE_LIFECYCLE.md). · [Full C++23-to-Metal compute laboratory](docs/METAL_COMPUTE_PIPELINE_LAB.md).
 
 KairoGPU is the GPU backend abstraction for the Kairo ML stack. It defines how
 the tensor runtime will talk to Metal, Vulkan, CUDA, or WebGPU without hardcoding
